@@ -1,7 +1,8 @@
 biutils
 =======
 
-biutils is a collection of small utitilies for Python that was developed by
+biutils is a collection of small utitilies for various Machine Learning tasks.
+It is written in Python and was developed by
 `Thomas Unterthiner <http://www.bioinf.jku.at/people/unterthiner/>`_
 at the `Institute of Bioinformatics <http://www.bioinf.jku.at>`_
 of the `Johannes Kepler University Linz <http://www.jku.at>`_.
