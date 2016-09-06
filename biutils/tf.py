@@ -253,8 +253,11 @@ def pad_to_bounding_box(image, offset_height, offset_width, target_height,
     return padded
 
 
+
+from tensorflow.python.platform import tf_logging as logging
+from tensorflow.python.framework import errors
 import threading
-class NumpyRunner(object):
+class NumpyRunner(tf.train.QueueRunner):
     """
     Enqueues data from numpy arrays after preprocessing in a thread.
 
@@ -267,7 +270,7 @@ class NumpyRunner(object):
         https://indico.io/blog/tensorflow-data-input-part2-extensions/
     So see there for more details.
     """
-    def __init__(self, input_list, process_function,
+    def __init__(self, input_list, preprocess_function,
                  batch_size, n_threads, shuffle=True, capacity=None):
         self.placeholders = []
         for i in range(len(input_list)):
@@ -277,59 +280,131 @@ class NumpyRunner(object):
         self.inputs = np.array(input_list)
         self.n_threads = n_threads
         self.shuffle = shuffle
-        self.lock = threading.Lock()
         self.batch_size = batch_size
-        self.is_enqueueing = False
-        outputs = process_function(*self.placeholders)
+        outputs = preprocess_function(*self.placeholders)
         shapes = [o.get_shape().as_list() for o in outputs]
         dtypes = [o.dtype for o in outputs]
         if capacity is None:
             capacity = self.batch_size*self.n_threads
-        self.queue = tf.FIFOQueue(shapes=shapes, dtypes=dtypes, capacity=capacity)
-        self.enqueue_op = self.queue.enqueue(outputs)
+        self._queue = tf.FIFOQueue(shapes=shapes, dtypes=dtypes, capacity=capacity)
+        self.enqueue_op = self._queue.enqueue(outputs)
+
+        # QueueRunner implementation changed a bit after 0.9, so bring _run
+        # up to the new implementation if you use tf 0.10
+        assert tf.__version__ == '0.9.0', "Update to new TF API"
+        super(NumpyRunner, self).__init__(self._queue, [self.enqueue_op, ])
 
 
     def get_data(self):
         ''' Return's tensors containing a batch of images and labels. '''
-        batch = self.queue.dequeue_many(self.batch_size)
+        batch = self._queue.dequeue_many(self.batch_size)
         return batch
 
-
-    def thread_main(self, sess, thread_id):
-        ''' Runs on alternate thread, keeps feeding the queue. '''
-        with self.lock:
+    def _run(self, sess, enqueue_op=None, coord=None):
+        """Execute the enqueue op in a loop, close the queue in case of error.
+        Args:
+            sess: A Session.
+            enqueue_op: The Operation to run.
+            coord: Optional Coordinator object for reporting errors and checking
+                for stop conditions.
+        """
+        with self._lock:
             a = self.inputs.copy()
 
+        decremented = False
+        try:
+            while True:
+                if coord and coord.should_stop():
+                    break
+                if self.shuffle:
+                    idx = np.arange(a.shape[1])
+                    np.random.shuffle(idx)
+                    a = a[:, idx]
+                try:
+                    self.__enqueue_epoch(sess, a)
+                except errors.OutOfRangeError:
+                    # This exception indicates that a queue was closed.
+                    with self._lock:
+                        self._runs -= 1
+                        decremented = True
+                        if self._runs == 0:
+                            try:
+                                sess.run(self._close_op)
+                            except Exception as e:
+                                # Intentionally ignore errors from close_op.
+                                logging.vlog(1, "Ignored exception: %s", str(e))
+                        return
+        except Exception as e:
+            # This catches all other exceptions.
+            if coord:
+                coord.request_stop(e)
+            else:
+                logging.error("Exception in QueueRunner: %s", str(e))
+                with self._lock:
+                    self._exceptions_raised.append(e)
+                raise
+        finally:
+            # Make sure we account for all terminations: normal or errors.
+            if not decremented:
+                with self._lock:
+                    self._runs -= 1
+
+    def create_threads(self, sess, coord=None, daemon=False, start=False):
+        """Create threads to run the enqueue ops.
+        This method requires a session in which the graph was launched. It creates
+        a list of threads, optionally starting them. There is one thread for each
+        op passed in `enqueue_ops`.
+        The `coord` argument is an optional coordinator, that the threads will use
+        to terminate together and report exceptions. If a coordinator is given,
+        this method starts an additional thread to close the queue when the
+        coordinator requests a stop.
+        This method may be called again as long as all threads from a previous call
+        have stopped.
+        Args:
+          sess: A `Session`.
+          coord: Optional `Coordinator` object for reporting errors and checking
+                 stop conditions.
+          daemon: Boolean. If `True` make the threads daemon threads.
+          start: Boolean. If `True` starts the threads. If `False` the
+                 caller must call the `start()` method of the returned threads.
+        Returns:
+          A list of threads.
+        Raises:
+          RuntimeError: If threads from a previous call to `create_threads()` are
+          still running.
+        """
+        with self._lock:
+            if self._runs > 0:
+                # Already started: no new threads to return.
+                return []
+            self._runs = self.n_threads
+            self._exceptions_raised = []
+
+        ret_threads = [threading.Thread(target=self._run, args=(sess, None, coord))
+                       for i in range(self.n_threads)]
+        if coord:
+            ret_threads.append(threading.Thread(target=self._close_on_stop,
+                               args=(sess, self._cancel_op, coord)))
+        for t in ret_threads:
+            if daemon:
+                t.daemon = True
+            if start:
+                t.start()
+        return ret_threads
+
+
+    def __enqueue_epoch(self, sess, a):
         n_entries = len(a[0])
         n_inputs = len(self.inputs)
-        while self.is_enqueueing:
-            if self.shuffle:
-                idx = np.arange(n_entries)
-                np.random.shuffle(idx)
-                a = a[:, idx]
-
-            for i in range(n_entries):
-                if not self.is_enqueueing:
-                    break
-                tmp = [(self.placeholders[j], a[j][i]) for j in range(n_inputs)]
-                feed_dict = dict(tmp)
-                sess.run(self.enqueue_op, feed_dict=feed_dict)
+        for i in range(n_entries):
+            tmp = [(self.placeholders[j], a[j][i]) for j in range(n_inputs)]
+            feed_dict = dict(tmp)
+            sess.run(self.enqueue_op, feed_dict=feed_dict)
 
 
-    def start_threads(self, sess):
-        """ Start background threads to feed queue """
-        assert not self.is_enqueueing
-        self.is_enqueueing = True
-        self.threads = []
-        for i in range(self.n_threads):
-            t = threading.Thread(target=self.thread_main, args=(sess, i))
-            t.daemon = True # thread will close when parent quits
-            t.start()
-            self.threads.append(t)
-        return self.threads
-
-
-    def stop_threads(self):
-        cr.is_enqueueing = False
-        for t in threads:
-            t.join()
+def produce_minibatches(input_list, batch_size, preprocess_function,
+                        n_threads, shuffle=True, capacity=None):
+    qr = NumpyRunner(input_list, preprocess_function, batch_size,
+                     n_threads, shuffle, capacity)
+    tf.train.add_queue_runner(qr)
+    return qr.get_data()
