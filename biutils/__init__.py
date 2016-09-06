@@ -1,4 +1,5 @@
 from biutils.misc import *
+from biutils.math import *
 from biutils.datasets import load_dataset
 
 import pkg_resources as __pkg_resources
