@@ -251,3 +251,85 @@ def pad_to_bounding_box(image, offset_height, offset_width, target_height,
     padded = tf.pad(image, paddings)
 
     return padded
+
+
+import threading
+class NumpyRunner(object):
+    """
+    Enqueues data from numpy arrays after preprocessing in a thread.
+
+    This is esentially a QueueRunner, but it takes its data from numpy arrays
+    (e.g. a list of filenames) instead of tensorflow constructs (like an
+    InputStringProducer).
+    This is usually faster (it saves the whole queuing from the input string
+    producer).
+    This class is based on
+        https://indico.io/blog/tensorflow-data-input-part2-extensions/
+    So see there for more details.
+    """
+    def __init__(self, input_list, process_function,
+                 batch_size, n_threads, shuffle=True, capacity=None):
+        self.placeholders = []
+        for i in range(len(input_list)):
+            p = tf.placeholder(dtype=tf.string, shape=[], name='input_%d'%i)
+            self.placeholders.append(p)
+
+        self.inputs = np.array(input_list)
+        self.n_threads = n_threads
+        self.shuffle = shuffle
+        self.lock = threading.Lock()
+        self.batch_size = batch_size
+        self.is_enqueueing = False
+        outputs = process_function(*self.placeholders)
+        shapes = [o.get_shape().as_list() for o in outputs]
+        dtypes = [o.dtype for o in outputs]
+        if capacity is None:
+            capacity = self.batch_size*self.n_threads
+        self.queue = tf.FIFOQueue(shapes=shapes, dtypes=dtypes, capacity=capacity)
+        self.enqueue_op = self.queue.enqueue(outputs)
+
+
+    def get_data(self):
+        ''' Return's tensors containing a batch of images and labels. '''
+        batch = self.queue.dequeue_many(self.batch_size)
+        return batch
+
+
+    def thread_main(self, sess, thread_id):
+        ''' Runs on alternate thread, keeps feeding the queue. '''
+        with self.lock:
+            a = self.inputs.copy()
+
+        n_entries = len(a[0])
+        n_inputs = len(self.inputs)
+        while self.is_enqueueing:
+            if self.shuffle:
+                idx = np.arange(n_entries)
+                np.random.shuffle(idx)
+                a = a[:, idx]
+
+            for i in range(n_entries):
+                if not self.is_enqueueing:
+                    break
+                tmp = [(self.placeholders[j], a[j][i]) for j in range(n_inputs)]
+                feed_dict = dict(tmp)
+                sess.run(self.enqueue_op, feed_dict=feed_dict)
+
+
+    def start_threads(self, sess):
+        """ Start background threads to feed queue """
+        assert not self.is_enqueueing
+        self.is_enqueueing = True
+        self.threads = []
+        for i in range(self.n_threads):
+            t = threading.Thread(target=self.thread_main, args=(sess, i))
+            t.daemon = True # thread will close when parent quits
+            t.start()
+            self.threads.append(t)
+        return self.threads
+
+
+    def stop_threads(self):
+        cr.is_enqueueing = False
+        for t in threads:
+            t.join()
