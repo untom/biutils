@@ -87,10 +87,34 @@ def get_timestamp(fmt='%y%m%d_%H%M'):
 
 def heuristic_svm_c(x):
     ''' Heuristic for setting C for linear SVMs by Thorsten Joachims.'''
-    import np
     c = 0
     n = x.shape[0]
     for i in range(n):
         c += np.sqrt(x[i, ].dot(x[i, ]))
     c /= n
     return 1.0 / c
+
+
+def calculate_confusion_matrix(y_true, y_pred, labels=None):
+    """ Calculates a confusion matrix.
+
+    Note: this is much faster than sklearn.metrics.confusion_matrix, but
+          should be otherwise equivalent.
+
+    Inputs:
+        y_true: groundtruth labels
+        y_pred: predictions
+        labels: labels to consider (optional, if not given, all labels
+                will be considered)
+
+    Returns:
+        Confusion matrix with columns=predicted classes, rows=true classes
+    """
+    a = y_true.astype(np.int64)
+    b = y_pred.astype(np.int64)
+    n = labels.max() + 1  # largest label value
+    if labels is not None:
+        idx = np.in1d(y_true, labels)
+        a = a[idx]
+        b = b[idx]
+    return np.bincount(n * a + b, minlength=n**2).reshape(n, n)
