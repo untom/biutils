@@ -7,13 +7,14 @@ Licensed under GPL, version 2 or a later (see LICENSE.rst)
 '''
 
 from __future__ import absolute_import, division, print_function
+import numpy as np
 
 
-def generate_slices(n, size, ignore_last_minibatch_if_smaller=False):
-    """Generates slices of given size up to n"""
+def generate_slices(n, slice_size, ignore_last_minibatch_if_smaller=False):
+    """Generates slices of given slice_size up to n"""
     start, end = 0, 0
-    for pack_num in range(int(n / size)):
-        end = start + size
+    for pack_num in range(int(n / slice_size)):
+        end = start + slice_size
         yield slice(start, end, None)
         start = end
     # last slice might not be a full batch
