@@ -274,9 +274,8 @@ def _create_norb(download_dir):
 def create_cifar10(download_dir=_DATA_DIRECTORY):
     logger = logging.getLogger(__name__)
     logger.info('reading CIFAR10 data...')
-    fname = download_file('http://www.cs.toronto.edu/~kriz/',
-                          'cifar-10-binary.tar.gz',
-                          os.path.join(download_dir, "raw"))
+    url = 'http://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz'
+    fname = download_file(url, os.path.join(download_dir, "raw"))
     import tarfile
     with tarfile.open(fname) as tf:
         filemembers = tf.getmembers()
@@ -295,7 +294,7 @@ def create_cifar10(download_dir=_DATA_DIRECTORY):
 
         y_va, x_va = _read_file(files[-1])
         y_te, x_te = _read_file('cifar-10-batches-bin/test_batch.bin')
-        return x_tr, y_tr, x_va, y_va, x_te, y_te
+        return x_tr, y_tr.ravel(), x_va, y_va.ravel(), x_te, y_te.ravel()
 
 
 def _create_cifar10_flat(download_dir):
