@@ -257,48 +257,43 @@ def pad_to_bounding_box(image, offset_height, offset_width, target_height,
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.framework import errors
 import threading
-class NumpyRunner(tf.train.QueueRunner):
-    """
-    Enqueues data from numpy arrays after preprocessing in a thread.
-
-    This is esentially a QueueRunner, but it takes its data from numpy arrays
-    (e.g. a list of filenames) instead of tensorflow constructs (like an
-    InputStringProducer).
-    This is usually faster (it saves the whole queuing from the input string
-    producer).
-    This class is based on
-        https://indico.io/blog/tensorflow-data-input-part2-extensions/
-    So see there for more details.
-    """
-    def __init__(self, input_list, preprocess_function,
-                 batch_size, n_threads, shuffle=True, capacity=None):
-        self.placeholders = []
-        for i in range(len(input_list)):
-            p = tf.placeholder(dtype=tf.string, shape=[], name='input_%d'%i)
-            self.placeholders.append(p)
-
-        self.inputs = np.array(input_list)
+class MyRunnerBase(tf.train.QueueRunner):
+    def __init__(self, outputs, batch_size, n_threads, shuffle=True, capacity=None):
         self.n_threads = n_threads
         self.shuffle = shuffle
         self.batch_size = batch_size
-        outputs = preprocess_function(*self.placeholders)
-        shapes = [o.get_shape().as_list() for o in outputs]
-        dtypes = [o.dtype for o in outputs]
+        self.outputs = outputs
+        shapes = [o.get_shape().as_list() for o in self.outputs]
+        dtypes = [o.dtype for o in self.outputs]
         if capacity is None:
-            capacity = self.batch_size*self.n_threads
-        self._queue = tf.FIFOQueue(shapes=shapes, dtypes=dtypes, capacity=capacity)
-        self.enqueue_op = self._queue.enqueue(outputs)
+            capacity = self.batch_size*(self.n_threads+1)
+        if shuffle == True:
+            min_cap = capacity // 4
+            self._queue = tf.RandomShuffleQueue(shapes=shapes, dtypes=dtypes,
+                                                min_after_dequeue=min_cap,
+                                                capacity=capacity)
+        else:
+            self._queue = tf.FIFOQueue(shapes=shapes, dtypes=dtypes, capacity=capacity)
+
+        self.enqueue_op = self.queue.enqueue(self.outputs)
 
         # QueueRunner implementation changed a bit after 0.9, so bring _run
         # up to the new implementation if you use tf 0.10
         assert tf.__version__ == '0.9.0', "Update to new TF API"
-        super(NumpyRunner, self).__init__(self._queue, [self.enqueue_op, ])
+
+        super(MyRunnerBase, self).__init__(self._queue, [self.enqueue_op, ])
 
 
     def get_data(self):
         ''' Return's tensors containing a batch of images and labels. '''
         batch = self._queue.dequeue_many(self.batch_size)
         return batch
+
+    def _setup_thread(self):
+        return None
+
+    def _prepare_epoch(self, thread_local_storage):
+        return thread_local_storage
 
     def _run(self, sess, enqueue_op=None, coord=None):
         """Execute the enqueue op in a loop, close the queue in case of error.
@@ -308,20 +303,17 @@ class NumpyRunner(tf.train.QueueRunner):
             coord: Optional Coordinator object for reporting errors and checking
                 for stop conditions.
         """
-        with self._lock:
-            a = self.inputs.copy()
+        thread_local_data = self._setup_thread()
 
         decremented = False
         try:
             while True:
                 if coord and coord.should_stop():
                     break
-                if self.shuffle:
-                    idx = np.arange(a.shape[1])
-                    np.random.shuffle(idx)
-                    a = a[:, idx]
+
+                thread_local_data = self._prepare_epoch(thread_local_data)
                 try:
-                    self.__enqueue_epoch(sess, a)
+                    self._enqueue_epoch(sess, thread_local_data, coord)
                 except errors.OutOfRangeError:
                     # This exception indicates that a queue was closed.
                     with self._lock:
@@ -348,6 +340,7 @@ class NumpyRunner(tf.train.QueueRunner):
             if not decremented:
                 with self._lock:
                     self._runs -= 1
+
 
     def create_threads(self, sess, coord=None, daemon=False, start=False):
         """Create threads to run the enqueue ops.
@@ -393,18 +386,56 @@ class NumpyRunner(tf.train.QueueRunner):
         return ret_threads
 
 
-    def __enqueue_epoch(self, sess, a):
+class NumpyQueueRunner(MyRunnerBase):
+    """
+    Enqueues data from numpy arrays after preprocessing in a thread.
+
+    This is esentially a QueueRunner, but it takes its data from numpy arrays
+    (e.g. a list of filenames) instead of tensorflow constructs (like an
+    InputStringProducer).
+    This is usually faster (it saves the whole queuing from the input string
+    producer).
+    This class is based on
+        https://indico.io/blog/tensorflow-data-input-part2-extensions/
+    So see there for more details.
+    """
+    def __init__(self, input_list, preprocess_function,
+                 batch_size, n_threads, shuffle=True, capacity=None):
+        self.inputs = np.array(input_list)
+        self.placeholders = []
+        for i in range(len(input_list)):
+            p = tf.placeholder(dtype=tf.string, shape=[], name='input_%d'%i)
+            self.placeholders.append(p)
+        outputs = preprocess_function(*self.placeholders)
+        super(NumpyQueueRunner, self).__init__(outputs, batch_size, n_threads,
+                                               shuffle, capacity)
+
+    def _setup_thread(self):
+        with self._lock:
+            a = self.inputs.copy()
+        return a
+
+    def _prepare_epoch(self, a):
+        if self.shuffle:
+            idx = np.arange(a.shape[1])
+            np.random.shuffle(idx)
+            a = a[:, idx]
+        return a
+
+    def _enqueue_epoch(self, sess, a, coord):
         n_entries = len(a[0])
         n_inputs = len(self.inputs)
         for i in range(n_entries):
             tmp = [(self.placeholders[j], a[j][i]) for j in range(n_inputs)]
             feed_dict = dict(tmp)
             sess.run(self.enqueue_op, feed_dict=feed_dict)
+            if coord and coord.should_stop():
+                break
 
 
 def produce_minibatches(input_list, batch_size, preprocess_function,
                         n_threads, shuffle=True, capacity=None):
-    qr = NumpyRunner(input_list, preprocess_function, batch_size,
-                     n_threads, shuffle, capacity)
+    qr = NumpyQueueRunner(input_list, preprocess_function, batch_size,
+                          n_threads, shuffle, capacity)
     tf.train.add_queue_runner(qr)
     return qr.get_data()
