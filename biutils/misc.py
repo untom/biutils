@@ -95,7 +95,7 @@ def heuristic_svm_c(x):
     return 1.0 / c
 
 
-def calculate_confusion_matrix(y_true, y_pred, labels=None):
+def calculate_confusion_matrix(y_true, y_pred, n_classes=None, labels=None):
     """ Calculates a confusion matrix.
 
     Note: this is much faster than sklearn.metrics.confusion_matrix, but
@@ -112,8 +112,11 @@ def calculate_confusion_matrix(y_true, y_pred, labels=None):
     """
     a = y_true.astype(np.int64)
     b = y_pred.astype(np.int64)
-    n = labels.max() + 1  # largest label value
+    if n_classes is None and labels is None:
+        raise RuntimeError("pass either number of classes or allowed labels")
+    n = n_classes
     if labels is not None:
+        n = labels.max() + 1  # largest label value
         idx = np.in1d(y_true, labels)
         a = a[idx]
         b = b[idx]
