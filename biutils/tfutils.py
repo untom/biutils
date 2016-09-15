@@ -51,6 +51,19 @@ def track_activation_summary(x, weights=None, bias=None):
         tf.histogram_summary(x.op.name + '/bias', bias)
 
 
+def create_training_op(loss, learning_rate, momentum, global_step,
+                       add_summaries=True):
+    tf.scalar_summary('learning_rate', learning_rate)
+    optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=momentum)
+    grads = optimizer.compute_gradients(loss)
+    for grad, var in grads:
+        if grad is not None and add_summaries:
+            tf.histogram_summary(var.op.name + '/gradients', grad)
+    apply_gradient_op = optimizer.apply_gradients(grads,
+                                                  global_step=global_step)
+    return apply_gradient_op
+
+
 def get_ce_loss(logits, y, summary_prefix='', add_summaries=True):
     cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
         logits, y, name='cross_entropy_per_example')
@@ -64,19 +77,6 @@ def get_ce_loss(logits, y, summary_prefix='', add_summaries=True):
     else:
         loss = ce_mean
     return loss
-
-
-def create_training_op(loss, learning_rate, momentum, global_step,
-                       add_summaries=True):
-    tf.scalar_summary('learning_rate', learning_rate)
-    optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=momentum)
-    grads = optimizer.compute_gradients(loss)
-    for grad, var in grads:
-        if grad is not None and add_summaries:
-            tf.histogram_summary(var.op.name + '/gradients', grad)
-    apply_gradient_op = optimizer.apply_gradients(grads,
-                                                  global_step=global_step)
-    return apply_gradient_op
 
 
 def add_linear_layer(x, n_outputs, keep_prob=None, activation_fn=tf.identity,
@@ -111,36 +111,6 @@ def add_conv_layer(x, kernel_shape, n_filters, strides=[1, 1],
     return conv
 
 
-# this is be part of tf.python.training.learning_rate_decay in tf from 0.10
-def polynomial_decay(learning_rate, global_step, decay_steps,
-                     end_learning_rate=0.0001, power=1.0,
-                     cycle=False, name=None):
-    with ops.op_scope(
-      [learning_rate, global_step, decay_steps, end_learning_rate, power],
-      name, "PolynomialDecay") as name:
-        learning_rate = ops.convert_to_tensor(learning_rate,
-                                              name="learning_rate")
-        dtype = learning_rate.dtype
-        global_step = math_ops.cast(global_step, dtype)
-        decay_steps = math_ops.cast(decay_steps, dtype)
-        end_learning_rate = math_ops.cast(end_learning_rate, dtype)
-        power = math_ops.cast(power, dtype)
-        if cycle:
-            # Find the first multiple of decay_steps that is
-            # bigger than global_step.
-            c = math_ops.ceil(global_step / decay_steps)
-            decay_steps = math_ops.mul(decay_steps, c)
-        else:
-            # Make sure that global_step used is not bigger than decay_steps.
-            global_step = math_ops.minimum(global_step, decay_steps)
-
-        p = math_ops.div(global_step, decay_steps)
-        return math_ops.add(math_ops.mul(learning_rate - end_learning_rate,
-                                         math_ops.pow(1 - p, power)),
-                            end_learning_rate, name=name)
-
-
-
 def resize_and_crop(image, smaller_size, cropped_size):
     '''
     Resizes the Image as in Krizhevsky et. al 2012:
@@ -161,96 +131,9 @@ def resize_and_crop(image, smaller_size, cropped_size):
     tw = tf.cond(oh < ow, lambda: bigger_size, lambda: smaller_size)
 
     image = tf.image.resize_images(image, th, tw)  # rescale
-    image = resize_image_with_crop_or_pad(image, cropped_size, cropped_size)
+    image = tf.image.resize_image_with_crop_or_pad(image, cropped_size, cropped_size)
     image.set_shape((cropped_size, cropped_size, 3))
     return image
-
-
-
-
-#
-# The following functions can't work if the image shape isn't set
-# in TF < 0.10. Thus we can't use them if we don't know the size of the
-# image in advance.
-# TODO: delete these functions once we switch to TF >= 0.10
-#
-def resize_image_with_crop_or_pad(image, target_height, target_width):
-    image_shape = tf.shape(image)
-    original_height = image_shape[0]
-    original_width = image_shape[1]
-
-    zero = tf.constant(0)
-    half = tf.constant(2)
-
-    offset_crop_width = tf.python.control_flow_ops.cond(
-        tf.less(
-            target_width,
-            original_width),
-        lambda: tf.floordiv(tf.sub(original_width, target_width), half),
-        lambda: zero)
-
-    offset_pad_width = tf.python.control_flow_ops.cond(
-        tf.greater(
-            target_width,
-            original_width),
-        lambda: tf.floordiv(tf.sub(target_width, original_width), half),
-        lambda: zero)
-
-    offset_crop_height = tf.python.control_flow_ops.cond(
-        tf.less(
-            target_height,
-            original_height),
-        lambda: tf.floordiv(tf.sub(original_height, target_height), half),
-        lambda: zero)
-
-    offset_pad_height = tf.python.control_flow_ops.cond(
-        tf.greater(
-            target_height,
-            original_height),
-        lambda: tf.floordiv(tf.sub(target_height, original_height), half),
-        lambda: zero)
-
-    cropped = crop_to_bounding_box(
-        image, offset_crop_height, offset_crop_width,
-        tf.minimum(target_height, original_height),
-        tf.minimum(target_width, original_width))
-
-    resized = pad_to_bounding_box(cropped, offset_pad_height, offset_pad_width,
-                                  target_height, target_width)
-
-    return resized
-
-
-def crop_to_bounding_box(image, offset_height, offset_width, target_height,
-                         target_width):
-    cropped = tf.slice(
-        image,
-        tf.pack([offset_height, offset_width, 0]),
-        tf.pack([target_height, target_width, -1]))
-
-    return cropped
-
-
-def pad_to_bounding_box(image, offset_height, offset_width, target_height,
-                        target_width):
-    image_shape = tf.shape(image)
-    original_height = image_shape[0]
-    original_width = image_shape[1]
-
-    after_padding_width = tf.sub(
-        tf.sub(target_width, offset_width),  original_width)
-    after_padding_height = tf.sub(
-        tf.sub(target_height, offset_height), original_height)
-
-    paddings = tf.reshape(
-        tf.pack(
-            [offset_height, after_padding_height,
-             offset_width, after_padding_width,
-             0, 0]), [3, 2])
-
-    padded = tf.pad(image, paddings)
-
-    return padded
 
 
 
@@ -277,10 +160,6 @@ class MyRunnerBase(tf.train.QueueRunner):
 
         self.enqueue_op = self.queue.enqueue(self.outputs)
 
-        # QueueRunner implementation changed a bit after 0.9, so bring _run
-        # up to the new implementation if you use tf 0.10
-        assert tf.__version__ == '0.9.0', "Update to new TF API"
-
         super(MyRunnerBase, self).__init__(self._queue, [self.enqueue_op, ])
 
 
@@ -303,6 +182,9 @@ class MyRunnerBase(tf.train.QueueRunner):
             coord: Optional Coordinator object for reporting errors and checking
                 for stop conditions.
         """
+        if coord:
+            coord.register_thread(threading.current_thread())
+
         thread_local_data = self._setup_thread()
 
         decremented = False
