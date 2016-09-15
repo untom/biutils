@@ -36,8 +36,8 @@ def load_dataset(dataset_name, return_testset=False,
 
     Returns 4 tuple of X, y, x_vaid, y_vaid)
     '''
-    if not dataset_name.endswith(".hdf5"):
-        fname = os.path.join(_DATA_DIRECTORY, dataset_name + ".hdf5")
+    if not dataset_name.endswith(".h5"):
+        fname = os.path.join(_DATA_DIRECTORY, dataset_name + ".h5")
     else:
         fname = os.path.join(_DATA_DIRECTORY, dataset_name)
 
@@ -69,9 +69,9 @@ def load_dataset(dataset_name, return_testset=False,
         if dataset_name == "enwik8":
             ds_keys = ['train', 'valid', 'test']
         else:
-            ds_keys = ['x_tr', 'y_tr', 'x_va', 'y_va']
+            ds_keys = ['x_train', 'y_train', 'x_valid', 'y_valid']
             if return_testset:
-                ds_keys.extend(['x_te', 'y_te'])
+                ds_keys.extend(['x_test', 'y_test'])
 
         data = []
         s = dataset['scale'][:] if 'scale' in dataset else 1.0
@@ -174,8 +174,8 @@ def _store(data, filename, other=None):
     logging.getLogger(__name__).info("saving into %s ..." % filename)
     with h5py.File(filename, "w") as f:
         for i in range(len(data)):
-            f.create_dataset(data[i][0] + "x", data=data[i][1])
-            f.create_dataset(data[i][0] + "y", data=data[i][2])#, compression="gzip", compression_opts = 0)
+            f.create_dataset('x_' + data[i][0], data=data[i][1])
+            f.create_dataset('y_' + data[i][0], data=data[i][2])#, compression="gzip", compression_opts = 0)
         if other:
             for k in other:
                 f.create_dataset(k, data=other[k])
@@ -239,7 +239,7 @@ def _create_mnist(download_dir):
     data = [['train', x_tr, y_tr],
             ['valid', x_va, y_va],
             ['test', x_te, y_te]]
-    _process_and_store(data, join(download_dir, "mnist.hdf5"))
+    _process_and_store(data, join(download_dir, "mnist.h5"))
 
 
 def _create_norb(download_dir):
@@ -268,7 +268,7 @@ def _create_norb(download_dir):
     data = [['train', x_tr, y_tr],
             ['valid', x_va, y_va],
             ['test', x_te, y_te]]
-    _process_and_store(data, os.path.join(download_dir, "norb.hdf5"))
+    _process_and_store(data, os.path.join(download_dir, "norb.h5"))
 
 
 def create_cifar10(download_dir=_DATA_DIRECTORY):
@@ -319,7 +319,7 @@ def _create_cifar10_img(download_dir):
     data = [['train', x_tr, y_tr],
             ['valid', x_va, y_va],
             ['test', x_te, y_te]]
-    dst = os.path.join(download_dir, "cifar10_img.hdf5")
+    dst = os.path.join(download_dir, "cifar10_img.h5")
     _store(data, dst)
 
 
@@ -361,7 +361,7 @@ def _create_mnist_basic(download_dir):
     data = [['train', x_tr, y_tr],
             ['valid', x_va, y_va],
             ['test', x_te, y_te]]
-    _process_and_store(data, os.path.join(download_dir, "mnist_basic.hdf5"))
+    _process_and_store(data, os.path.join(download_dir, "mnist_basic.h5"))
 
 
 def _create_mnist_bgimg(download_dir):
@@ -373,7 +373,7 @@ def _create_mnist_bgimg(download_dir):
     data = [['train', x_tr, y_tr],
             ['valid', x_va, y_va],
             ['test', x_te, y_te]]
-    _process_and_store(data, os.path.join(download_dir, "mnist_bgimg.hdf5"))
+    _process_and_store(data, os.path.join(download_dir, "mnist_bgimg.h5"))
 
 
 def _create_mnist_bgrand(download_dir):
@@ -385,7 +385,7 @@ def _create_mnist_bgrand(download_dir):
     data = [['train', x_tr, y_tr],
             ['valid', x_va, y_va],
             ['test', x_te, y_te]]
-    _process_and_store(data, os.path.join(download_dir, "mnist_bgrand.hdf5"))
+    _process_and_store(data, os.path.join(download_dir, "mnist_bgrand.h5"))
 
 
 def _create_mnist_rot(download_dir):
@@ -397,7 +397,7 @@ def _create_mnist_rot(download_dir):
     data = [['train', x_tr, y_tr],
             ['valid', x_va, y_va],
             ['test', x_te, y_te]]
-    _process_and_store(data, os.path.join(download_dir, "mnist_rot.hdf5"))
+    _process_and_store(data, os.path.join(download_dir, "mnist_rot.h5"))
 
 
 def _create_rectangles(download_dir):
@@ -407,7 +407,7 @@ def _create_rectangles(download_dir):
     data = [['train', x_tr, y_tr],
             ['valid', x_va, y_va],
             ['test', x_te, y_te]]
-    _process_and_store(data, os.path.join(download_dir, "rectangles.hdf5"))
+    _process_and_store(data, os.path.join(download_dir, "rectangles.h5"))
 
 
 def _create_convex(download_dir):
@@ -417,7 +417,7 @@ def _create_convex(download_dir):
     data = [['train', x_tr, y_tr],
             ['valid', x_va, y_va],
             ['test', x_te, y_te]]
-    _process_and_store(data, os.path.join(download_dir, "convex.hdf5"))
+    _process_and_store(data, os.path.join(download_dir, "convex.h5"))
 
 
 def _create_covertype(download_dir):
@@ -460,7 +460,7 @@ def _create_covertype(download_dir):
     s = np.ones(x_tr.shape[1])
     s[quant_idx+int_idx] = scaler.std_
     other = {'center': m, "scale": s}
-    _store(data, os.path.join(download_dir, "covertype.hdf5"), other)
+    _store(data, os.path.join(download_dir, "covertype.h5"), other)
 
 
 def _create_enwik8(download_dir):
@@ -520,7 +520,7 @@ def _create_enwik8(download_dir):
     del(data_tr, data_va, data_te)
     gc.collect()
 
-    fname = os.path.join(download_dir, "enwik8.hdf5")
+    fname = os.path.join(download_dir, "enwik8.h5")
     with h5py.File(fname, "w") as f:
         f.create_dataset('train', data=code_tr)
         f.create_dataset('valid', data=code_va)
@@ -594,4 +594,4 @@ def _create_tox21(download_dir):
     data = [['train', x_tr,  y_tr],
             ['valid', x_va,  y_va],
             ['test',  x_te,  y_te]]
-    _store(data, os.path.join(download_dir, "tox21.hdf5"))
+    _store(data, os.path.join(download_dir, "tox21.h5"))
