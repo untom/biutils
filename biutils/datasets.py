@@ -301,10 +301,10 @@ def _create_cifar10_flat(download_dir):
     ''' CIFAR-10, from www.cs.toronto.edu/~kriz/cifar.html.'''
     x_tr, y_tr, x_va, y_va, x_te, y_te = create_cifar10(download_dir)
 
-    data = [['train', x_tr, y_tr],
-            ['valid', x_va, y_va],
-            ['test', x_te, y_te]]
-    dst = os.path.join(download_dir, "cifar10.hdf5")
+    data = [['train', x_tr, y_tr.reshape(-1, 1)],
+            ['valid', x_va, y_va.reshape(-1, 1)],
+            ['test', x_te, y_te.reshape(-1, 1)]]
+    dst = os.path.join(download_dir, "cifar10.h5")
     _process_and_store(data, dst)
     # imshow(np.rot90(traindata[882, ].reshape((3, 32, 32)).T), origin="lower")
 
