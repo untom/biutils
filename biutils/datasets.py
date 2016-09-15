@@ -537,10 +537,10 @@ def create_tox21(sparsity_cutoff, validation_fold,
     dst = os.path.join(download_dir, "raw")
     fn_x_tr_d = download_file(urlbase, dst, 'tox21_dense_train.csv.gz')
     fn_x_tr_s = download_file(urlbase, dst, 'tox21_sparse_train.mtx.gz')
-    fn_y_tr = download_file(urlbase, dst, 'tox21_labels_train.csv')
+    fn_y_tr = download_file(urlbase, dst, 'tox21_labels_train.csv.gz')
     fn_x_te_d = download_file(urlbase, dst, 'tox21_dense_test.csv.gz')
     fn_x_te_s = download_file(urlbase, dst, 'tox21_sparse_test.mtx.gz')
-    fn_y_te = download_file(urlbase, dst, 'tox21_labels_test.csv')
+    fn_y_te = download_file(urlbase, dst, 'tox21_labels_test.csv.gz')
     cpd = download_file(urlbase, dst, 'tox21_compoundData.csv')
 
     y_tr = pd.read_csv(fn_y_tr, index_col=0)
