@@ -79,6 +79,23 @@ def get_ce_loss(logits, y, summary_prefix='', add_summaries=True):
     return loss
 
 
+def get_multitask_ce_loss(logits, y, summary_prefix='', add_summaries=True):
+    '''Expects invalid labels to be encoded as -1.'''
+    cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(logits, y, name='cross_entropy_per_example')
+    mask = tf.cast(tf.not_equal(y, -1), tf.float32)
+    cross_entropy *= mask
+    ce_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
+    if add_summaries:
+        tf.scalar_summary(summary_prefix+'cross_entropy', ce_mean)
+    if len(tf.get_collection('regularization_losses')) > 0:
+        loss = ce_mean + tf.add_n(tf.get_collection('regularization_losses'))
+        if add_summaries:
+            tf.scalar_summary(summary_prefix+'loss', loss)
+    else:
+        loss = ce_mean
+    return loss
+
+
 def add_linear_layer(x, n_outputs, keep_prob=None, activation_fn=tf.identity,
                      w_initializer=None, regularizer=None, b_initializer=None,
                      add_summaries=True):
