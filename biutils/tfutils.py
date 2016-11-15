@@ -17,7 +17,7 @@ from tensorflow.python.ops import math_ops
 
 
 def generate_minibatches(batch_size, x_placeholder, y_placeholder,
-                         x_data, y_data, n_epochs=None,
+                         x_data, y_data, n_epochs=1,
                          ignore_last_minibatch_if_smaller=True, shuffle=True,
                          feed_dict=None):
     cnt_epochs = 0
