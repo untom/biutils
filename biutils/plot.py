@@ -18,6 +18,9 @@ except ImportError:
     import warnings
     warnings.warn("matplotlib unavailable")
 
+def plot_color_images(data, nrows=8, ncols=8, axis=None,
+                     local_norm="minmax", **kwargs):
+    plot_images(data, nrows, ncols, is_color=True, axis=axis, local_norm=local_norm, **kwargs)
 
 def plot_images(data, nrows, ncols, is_color=False, axis=None,
                 local_norm="maxabs", **kwargs):
