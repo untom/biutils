@@ -18,9 +18,11 @@ except ImportError:
     import warnings
     warnings.warn("matplotlib unavailable")
 
+
 def plot_color_images(data, nrows=8, ncols=8, axis=None,
                      local_norm="minmax", **kwargs):
     plot_images(data, nrows, ncols, is_color=True, axis=axis, local_norm=local_norm, **kwargs)
+
 
 def plot_images(data, nrows, ncols, is_color=False, axis=None,
                 local_norm="maxabs", **kwargs):
@@ -61,4 +63,43 @@ def plot_images(data, nrows, ncols, is_color=False, axis=None,
         axis.imshow(img.reshape(nrows*ppi, ncols*ppi),
                     interpolation="none", cmap="Greys_r")
     axis.axis("off")
+    return fig
+
+
+def plot_gridsearch_results(df, target_column, param_columns=None,
+                            n_cols=3, axes=None, **kwargs):
+    ''' Plots the results of a hyperparameter search.
+
+    Typical usage could be:
+
+        rs = RandomizedSearchCV(...)
+        rs.fit(x_tr)
+        res = pd.DataFrame(rs.cv_results_)
+        plot_gridsearch_results(res, 'mean_test_score')
+    '''
+
+    if param_columns is None:
+        param_columns = [c for c in df.columns if c.startswith('param_')]
+
+    if axes is None:
+        n_rows = math.ceil(len(cols) / n_cols)
+        fig, axes = plt.subplots(n_rows, n_cols, sharey=True, **kwargs)
+    else:
+        fig = plt.gcf()
+
+    for i in range(len(axes.flat)):
+        ax = axes.flat[i]
+        if i >= len(cols):
+            ax.axis('off')
+            continue
+
+        if len(res[cols[i]].unique()) > 7:  # param is probably continuous
+            res.plot(x=cols[i], y=target_col, ax=ax, kind='scatter')
+        else:
+            res.boxplot(target_col, cols[i], ax=ax)
+            fig.suptitle('')  # pandas boxplots overwrite the suptitle
+        ax.set_title(cols[i], fontsize=8)
+        ax.set_xlabel('')
+        ax.tick_params(labelsize=7)
+
     return fig
