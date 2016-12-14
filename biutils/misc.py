@@ -121,3 +121,12 @@ def calculate_confusion_matrix(y_true, y_pred, n_classes=None, labels=None):
         a = a[idx]
         b = b[idx]
     return np.bincount(n * a + b, minlength=n**2).reshape(n, n)
+
+
+def random_seed():
+    '''
+    Returns a seed that should be different for each process.
+    This is useful if we start many processes at the same time.
+    '''
+    import os, time
+    return np.uint32(hash(os.getpid() + time.time()) % 4294967295)
