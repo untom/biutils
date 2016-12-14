@@ -8,6 +8,7 @@ Licensed under GPL, version 2 or a later (see LICENSE.rst)
 
 from __future__ import absolute_import, division, print_function
 
+import math
 import numpy as np
 
 # Importing matplotlib might fail under special conditions
@@ -82,23 +83,23 @@ def plot_gridsearch_results(df, target_column, param_columns=None,
         param_columns = [c for c in df.columns if c.startswith('param_')]
 
     if axes is None:
-        n_rows = math.ceil(len(cols) / n_cols)
+        n_rows = math.ceil(len(param_columns) / n_cols)
         fig, axes = plt.subplots(n_rows, n_cols, sharey=True, **kwargs)
     else:
         fig = plt.gcf()
 
     for i in range(len(axes.flat)):
         ax = axes.flat[i]
-        if i >= len(cols):
+        if i >= len(param_columns):
             ax.axis('off')
             continue
 
-        if len(res[cols[i]].unique()) > 7:  # param is probably continuous
-            res.plot(x=cols[i], y=target_col, ax=ax, kind='scatter')
+        if len(df[param_columns[i]].unique()) > 7:  # param seems continuous
+            df.plot(x=param_columns[i], y=target_column, ax=ax, kind='scatter')
         else:
-            res.boxplot(target_col, cols[i], ax=ax)
+            df.boxplot(target_column, param_columns[i], ax=ax)
             fig.suptitle('')  # pandas boxplots overwrite the suptitle
-        ax.set_title(cols[i], fontsize=8)
+        ax.set_title(param_columns[i], fontsize=8)
         ax.set_xlabel('')
         ax.tick_params(labelsize=7)
 
