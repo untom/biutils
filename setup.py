@@ -2,7 +2,7 @@ from setuptools import setup
 from codecs import open
 from os import path
 import numpy as np
-VERSION = '2016.08'
+VERSION = '2016.12'
 
 
 # Get the long description from the relevant file
