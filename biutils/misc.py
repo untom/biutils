@@ -7,6 +7,7 @@ Licensed under GPL, version 2 or a later (see LICENSE.rst)
 '''
 
 from __future__ import absolute_import, division, print_function
+import os
 import numpy as np
 
 
@@ -25,7 +26,7 @@ def generate_slices(n, slice_size, ignore_last_minibatch_if_smaller=False):
 
 def download_file(urlbase, destination_dir, fname=None):
     ''' Downloads a file to a given destination directory.'''
-    import os, sys
+    import sys
     if not os.path.exists(destination_dir):
         os.mkdir(destination_dir)
     if sys.version_info < (3,):
@@ -49,7 +50,7 @@ def print_system_information(additional_modules=[]):
 
     Prints host information as well as version information about some of the
     more important packages. This is useful in IPython notebooks.'''
-    import sys, os, datetime, platform  # imported here for quicker imports
+    import sys, datetime, platform  # imported here for quicker imports
     host_info = (platform.node(), platform.platform())
     print("Host:               ", "%s: %s" % host_info)
     print("Date:               ", str(datetime.datetime.now()))
@@ -83,6 +84,20 @@ def get_timestamp(fmt='%y%m%d_%H%M'):
     import datetime
     now = datetime.datetime.now()
     return datetime.datetime.strftime(now, fmt)
+
+
+def get_experiment_id():
+    '''Returns a string that should be unique for each runs of an experiment.
+
+    Sometimes, using a timestamp is not enough, e.g. when we start multiple
+    threads at the same time. For those rare occasions, we use a short
+    timestamp and the PID.
+    '''
+
+    ts = get_timestamp('%y%m%d%H%M')
+    pid = os.getpid()
+    return "%s_%d" % (ts, pid)
+
 
 
 def heuristic_svm_c(x):
@@ -128,5 +143,5 @@ def random_seed():
     Returns a seed that should be different for each process.
     This is useful if we start many processes at the same time.
     '''
-    import os, time
+    import time
     return np.uint32(hash(os.getpid() + time.time()) % 4294967295)
