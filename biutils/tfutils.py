@@ -14,6 +14,7 @@ import tensorflow as tf
 from tensorflow.contrib import layers
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.util import nest
 
 
 def generate_minibatches(batch_size, x_placeholder, y_placeholder,
@@ -338,3 +339,112 @@ def produce_minibatches(input_list, batch_size, preprocess_function,
                           n_threads, shuffle, capacity)
     tf.train.add_queue_runner(qr)
     return qr.get_data()
+
+
+class LSTMwithSummaries(tf.nn.rnn_cell.RNNCell):
+  """Basic LSTM recurrent network cell that has summaries for interesting things.
+  """
+
+  def __init__(self, num_units, i_init=1.0, f_init=0.0, o_init=0.0,
+               add_summaries=True, activation=tf.nn.tanh):
+    """Initialize the basic LSTM cell.
+    Args:
+      num_units: int, The number of units in the LSTM cell.
+      activation: Activation function of the inner states.
+    """
+    self._num_units = num_units
+    self._activation = activation
+    self._bias_inits = (i_init, 0.0, f_init, o_init)
+    self._add_summaries = add_summaries
+    self._summaries = []
+
+  @property
+  def state_size(self):
+    return tf.nn.rnn_cell.LSTMStateTuple(self._num_units, self._num_units)
+
+  @property
+  def output_size(self):
+    return self._num_units
+
+  def __call__(self, inputs, state, scope=None):
+    """Long short-term memory cell (LSTM)."""
+    with tf.variable_scope(scope or "basic_lstm_cell"):
+      # Parameters of gates are concatenated into one multiply for efficiency.
+      c, h = state
+      concat = self._linear([inputs, h])
+
+      # i = input_gate, j = new_input, f = forget_gate, o = output_gate
+      i, j, f, o = tf.split(1, 4, concat)
+      i = tf.nn.sigmoid(i)
+      f = tf.nn.sigmoid(f)
+      o = tf.nn.sigmoid(o)
+      if self._add_summaries:
+          self._summaries.append(tf.summary.merge([
+            tf.summary.histogram("i_gate", i),
+            tf.summary.histogram("f_gate", f),
+            tf.summary.histogram("o_gate", o)]))
+
+      new_c = (c * f + i * self._activation(j))
+      new_h = self._activation(new_c) * o
+      new_state = tf.nn.rnn_cell.LSTMStateTuple(new_c, new_h)
+      return new_h, new_state
+
+  def _linear(self, args):
+    """Linear map: sum_i(args[i] * W[i]), where W[i] is a variable.
+    Args:
+      args: a 2D Tensor or a list of 2D, batch x n, Tensors.
+      output_size: int, second dimension of W[i].
+      bias: boolean, whether to add a bias term or not.
+      bias_start: starting value to initialize the bias; 0 by default.
+    Returns:
+      A 2D Tensor with shape [batch x output_size] equal to
+      sum_i(args[i] * W[i]), where W[i]s are newly created matrices.
+    Raises:
+      ValueError: if some of the arguments has unspecified or wrong shape.
+    """
+    if args is None or (nest.is_sequence(args) and not args):
+      raise ValueError("`args` must be specified")
+    if not nest.is_sequence(args):
+      args = [args]
+
+    output_size = 4*self._num_units
+
+    # Calculate the total size of arguments on dimension 1.
+    total_arg_size = 0
+    shapes = [a.get_shape() for a in args]
+    for shape in shapes:
+      if shape.ndims != 2:
+        raise ValueError("linear is expecting 2D arguments: %s" % shapes)
+      if shape[1].value is None:
+        raise ValueError("linear expects shape[1] to be provided for shape %s, "
+                         "but saw %s" % (shape, shape[1]))
+      else:
+        total_arg_size += shape[1].value
+
+    dtype = [a.dtype for a in args][0]
+
+    # Now the computation.
+    scope = tf.get_variable_scope()
+    with tf.variable_scope(scope) as outer_scope:
+      weights = tf.get_variable("weights", [total_arg_size, output_size], dtype=dtype)
+      if len(args) == 1:
+        res = tf.matmul(args[0], weights)
+      else:
+        res = tf.matmul(tf.concat(1, args), weights)
+
+      with tf.variable_scope(outer_scope) as inner_scope:
+        inner_scope.set_partitioner(None)
+        inits = [tf.constant_initializer(b, dtype=dtype) for b in self._bias_inits]
+        ib = tf.get_variable("i_bias", [self._num_units], dtype=dtype, initializer=inits[0])
+        jb = tf.get_variable("j_bias", [self._num_units], dtype=dtype, initializer=inits[1])
+        fb = tf.get_variable("f_bias", [self._num_units], dtype=dtype, initializer=inits[2])
+        ob = tf.get_variable("o_bias", [self._num_units], dtype=dtype, initializer=inits[3])
+
+      if self._add_summaries:
+          self._summaries.append(tf.summary.merge([
+            tf.summary.histogram("i_bias", ib),
+            tf.summary.histogram("f_bias", fb),
+            tf.summary.histogram("o_bias", ob)]))
+
+      bias = tf.concat(0, [ib, jb, fb, ob])
+    return tf.nn.bias_add(res, bias)
