@@ -529,8 +529,11 @@ def _create_enwik8(download_dir):
         f.create_dataset('decode', data=decode_lookup)
 
 
-def create_tox21(sparsity_cutoff, validation_fold,
+def create_tox21(sparsity_cutoff, va_folds,
                  dtype=np.float32, download_dir=_DATA_DIRECTORY):
+    ''' Creates a preprocessed version of the tox21 dataset.
+    va_folds is a list of folds that are to be put into the validation set.
+    '''
     from scipy import io
     import pandas as pd
     urlbase = "http://www.bioinf.jku.at/research/deeptox/"
@@ -555,28 +558,46 @@ def create_tox21(sparsity_cutoff, validation_fold,
     x_tr_sparse = x_tr_sparse[:, sparse_col_idx].A
     x_te_sparse = x_te_sparse[:, sparse_col_idx].A
 
+    # filter out low-variance features
     dense_col_idx = np.where(x_tr_dense.var(0) > 1e-6)[0]
     x_tr_dense = x_tr_dense[:, dense_col_idx]
     x_te_dense = x_te_dense[:, dense_col_idx]
 
-    # The validation set consists of those samples with
-    # cross validation fold #5
+    # handle very large and exponential features
+    # (Note experimentally, this doesn't seem to make a difference)
+    xm = np.minimum(x_tr_dense.min(0), x_te_dense.min(0)) # avoid negative numbers
+    log_x_tr = np.log10(x_tr_dense - xm+1e-8)
+    log_x_te = np.log10(x_te_dense - xm+1e-8)
+    exp_cols = np.where(x_tr_dense.ptp(0) > 10.0)
+    x_tr_dense[:, exp_cols] = log_x_tr[:, exp_cols]
+    x_te_dense[:, exp_cols] = log_x_te[:, exp_cols]
+
+
+    # find the index of the validation items
     info = pd.read_csv(cpd, index_col=0)
-    f = info.CVfold[info.set != 'test'].values
-    idx_va = f == float(validation_fold)
+    folds = info.CVfold[info.set != 'test'].values
+    idx_va = np.zeros(folds.shape[0], np.bool)
+    for fid in va_folds:
+        idx_va |= (folds == float(fid))
 
     # normalize features
-    from sklearn.preprocessing import StandardScaler
-    s = StandardScaler()
-    s.fit(x_tr_dense[~idx_va])
-    x_tr_dense = s.transform(x_tr_dense)
-    x_te_dense = s.transform(x_te_dense)
-
-    x_tr_sparse = np.tanh(x_tr_sparse)
-    x_te_sparse = np.tanh(x_te_sparse)
+    from sklearn.preprocessing import StandardScaler, RobustScaler
 
     x_tr = np.hstack([x_tr_dense, x_tr_sparse])
     x_te = np.hstack([x_te_dense, x_te_sparse])
+
+    s = RobustScaler()
+    s.fit(x_tr[~idx_va])
+    x_tr = s.transform(x_tr)
+    x_te = s.transform(x_te)
+
+    x_tr = np.tanh(x_tr)
+    x_te = np.tanh(x_te)
+
+    s = StandardScaler()
+    s.fit(x_tr[~idx_va])
+    x_tr = s.transform(x_tr)
+    x_te = s.transform(x_te)
 
     return (x_tr[~idx_va].astype(dtype, order='C'),
             y_tr[~idx_va].values.astype(dtype, order='C'),
@@ -588,7 +609,7 @@ def create_tox21(sparsity_cutoff, validation_fold,
 
 def _create_tox21(download_dir):
     sparsity_cutoff = 0.05
-    validation_fold = 5
+    validation_fold = [5, ]
     d = create_tox21(sparsity_cutoff, validation_fold)
     x_tr, y_tr, x_va, y_va, x_te, y_te = d
     data = [['train', x_tr,  y_tr],
