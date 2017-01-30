@@ -68,7 +68,7 @@ def plot_images(data, nrows, ncols, is_color=False, axis=None,
 
 
 def plot_gridsearch_results(df, target_column, param_columns=None,
-                            n_cols=3, axes=None, **kwargs):
+                            n_cols=3, axes=None, alpha=0.05, **kwargs):
     ''' Plots the results of a hyperparameter search.
 
     Typical usage could be:
@@ -95,7 +95,7 @@ def plot_gridsearch_results(df, target_column, param_columns=None,
             continue
 
         if len(df[param_columns[i]].unique()) > 7:  # param seems continuous
-            df.plot(x=param_columns[i], y=target_column, ax=ax, kind='scatter')
+            df.plot(x=param_columns[i], y=target_column, ax=ax, kind='scatter', alpha=alpha)
         else:
             df.boxplot(target_column, param_columns[i], ax=ax)
             fig.suptitle('')  # pandas boxplots overwrite the suptitle
