@@ -355,7 +355,7 @@ class MyLSTMStateTuple(_MyLSTMStateTuple):
         return c.dtype
 
 
-class LSTMwithSummaries(tf.nn.rnn_cell.RNNCell):
+class LSTMwithSummaries(tf.contrib.rnn.RNNCell):
     """Basic LSTM recurrent network cell that has summaries for interesting things.
     """
 
