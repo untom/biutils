@@ -8,7 +8,7 @@ Licensed under GPL, version 2 or a later (see LICENSE.rst)
 
 from __future__ import absolute_import, division, print_function
 from biutils.misc import generate_slices
-
+from scipy import sparse
 import collections
 import numpy as np
 import tensorflow as tf
@@ -32,6 +32,8 @@ def generate_minibatches(batch_size, x_placeholder, y_placeholder,
         for s in generate_slices(x_data.shape[0], batch_size,
                                  ignore_last_minibatch_if_smaller):
             xx, yy = x_data[s], y_data[s]
+            if sparse.issparse(xx):
+                xx = xx.A
             if feed_dict is None:
                 feed_dict = {x_placeholder: xx, y_placeholder: yy}
             else:
@@ -179,7 +181,7 @@ class MyRunnerBase(tf.train.QueueRunner):
 
         self.enqueue_op = self.queue.enqueue(self.outputs)
 
-        super(MyRunnerBase, self).__init__(self._queue, [self.enqueue_op, ])
+        super(MyRunnerBase, self).__init__(self._queue, [self.enqueue_op]*n_threads)
 
 
     def get_data(self):
@@ -188,6 +190,10 @@ class MyRunnerBase(tf.train.QueueRunner):
         return batch
 
     def _setup_thread(self):
+        '''
+        Sets up each thread. This can be used to allocate any thread-local
+        data (such as a copy of the input data for each thread).
+        '''
         return None
 
     def _prepare_epoch(self, thread_local_storage):
@@ -215,12 +221,12 @@ class MyRunnerBase(tf.train.QueueRunner):
                 thread_local_data = self._prepare_epoch(thread_local_data)
                 try:
                     self._enqueue_epoch(sess, thread_local_data, coord)
-                except errors.OutOfRangeError:
+                except self._queue_closed_exception_types:
                     # This exception indicates that a queue was closed.
                     with self._lock:
-                        self._runs -= 1
+                        self._runs_per_session[sess] -= 1
                         decremented = True
-                        if self._runs == 0:
+                        if self._runs_per_session[sess] == 0:
                             try:
                                 sess.run(self._close_op)
                             except Exception as e:
@@ -240,7 +246,7 @@ class MyRunnerBase(tf.train.QueueRunner):
             # Make sure we account for all terminations: normal or errors.
             if not decremented:
                 with self._lock:
-                    self._runs -= 1
+                    self._runs_per_session[sess] -= 1
 
 
     def create_threads(self, sess, coord=None, daemon=False, start=False):
@@ -268,11 +274,16 @@ class MyRunnerBase(tf.train.QueueRunner):
           still running.
         """
         with self._lock:
-            if self._runs > 0:
-                # Already started: no new threads to return.
-                return []
-            self._runs = self.n_threads
+            try:
+                if self._runs_per_session[sess] > 0:
+                    # Already started: no new threads to return.
+                    return []
+            except KeyError:
+                # We haven't seen this session yet.
+                pass
+            self._runs_per_session[sess] = len(self._enqueue_ops)
             self._exceptions_raised = []
+            self._runs = self.n_threads
 
         ret_threads = [threading.Thread(target=self._run, args=(sess, None, coord))
                        for i in range(self.n_threads)]
@@ -280,6 +291,8 @@ class MyRunnerBase(tf.train.QueueRunner):
             ret_threads.append(threading.Thread(target=self._close_on_stop,
                                args=(sess, self._cancel_op, coord)))
         for t in ret_threads:
+            if coord:
+                coord.register_thread(t)
             if daemon:
                 t.daemon = True
             if start:
