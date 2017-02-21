@@ -162,13 +162,16 @@ from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.framework import errors
 import threading
 class MyRunnerBase(tf.train.QueueRunner):
-    def __init__(self, outputs, batch_size, n_threads, shuffle=True, capacity=None):
+    def __init__(self, outputs, batch_size, n_threads, shuffle=True, capacity=None, enqueue_many=False,
+                 shapes=None, dtypes=None):
         self.n_threads = n_threads
         self.shuffle = shuffle
         self.batch_size = batch_size
         self.outputs = outputs
-        shapes = [o.get_shape().as_list() for o in self.outputs]
-        dtypes = [o.dtype for o in self.outputs]
+        if shapes is None:
+            shapes = [o.get_shape().as_list() for o in self.outputs]
+        if dtypes is None:
+            dtypes = [o.dtype for o in self.outputs]
         if capacity is None:
             capacity = self.batch_size*(self.n_threads+1)
         if shuffle == True:
@@ -179,7 +182,10 @@ class MyRunnerBase(tf.train.QueueRunner):
         else:
             self._queue = tf.FIFOQueue(shapes=shapes, dtypes=dtypes, capacity=capacity)
 
-        self.enqueue_op = self.queue.enqueue(self.outputs)
+        if enqueue_many:
+            self.enqueue_op = self._queue.enqueue_many(self.outputs)
+        else:
+            self.enqueue_op = self._queue.enqueue(self.outputs)
 
         super(MyRunnerBase, self).__init__(self._queue, [self.enqueue_op]*n_threads)
 
@@ -211,7 +217,6 @@ class MyRunnerBase(tf.train.QueueRunner):
             coord.register_thread(threading.current_thread())
 
         thread_local_data = self._setup_thread()
-
         decremented = False
         try:
             while True:
@@ -234,11 +239,12 @@ class MyRunnerBase(tf.train.QueueRunner):
                                 logging.vlog(1, "Ignored exception: %s", str(e))
                         return
         except Exception as e:
+            print("Exception in MyRunnerBase: %s" % str(e), flush=True)
             # This catches all other exceptions.
             if coord:
                 coord.request_stop(e)
             else:
-                logging.error("Exception in QueueRunner: %s", str(e))
+                logging.error("Exception in QueueRunner: %s" % str(e))
                 with self._lock:
                     self._exceptions_raised.append(e)
                 raise
