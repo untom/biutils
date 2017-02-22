@@ -10,6 +10,6 @@ of the `Johannes Kepler University Linz <http://www.jku.at>`_.
 
 License
 -------
-binet is licensed under the
+biutils is licensed under the
 `General Public License (GPL) Version 2 or higher <http://www.gnu.org/licenses/gpl-2.0.html>`_.
 See ``License.rst`` for the full, gory details.
