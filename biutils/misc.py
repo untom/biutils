@@ -99,7 +99,6 @@ def get_experiment_id():
     return "%s_%d" % (ts, pid)
 
 
-
 def heuristic_svm_c(x):
     ''' Heuristic for setting C for linear SVMs by Thorsten Joachims.'''
     c = 0
@@ -145,19 +144,3 @@ def random_seed():
     '''
     import time
     return np.uint32(hash(os.getpid() + time.time()) % 4294967295)
-
-
-def save_sparse_csr(filename, array):
-    from scipy import sparse
-    if not sparse.issparse(array):
-        raise RuntimeError("Not a sparse matrix")
-    elif not sparse.isspmatrix_csr(array):
-        array = array.tocsr()
-    np.savez_compressed(filename, data=array.data ,indices=array.indices,
-             indptr =array.indptr, shape=array.shape)
-
-
-def load_sparse_csr(filename):
-    from scipy.sparse import csr_matrix
-    f = np.load(filename)
-    return csr_matrix((f['data'], f['indices'], f['indptr']), shape=f['shape'])
