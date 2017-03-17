@@ -238,9 +238,14 @@ class MyRunnerBase(tf.train.QueueRunner):
                                 # Intentionally ignore errors from close_op.
                                 logging.vlog(1, "Ignored exception: %s", str(e))
                         return
+        except tf.errors.CancelledError as e:  # when we are requested to stop
+            if coord:
+                coord.request_stop(e)
+            else:
+                raise
         except Exception as e:
-            print("Exception in MyRunnerBase: %s" % str(e), flush=True)
             # This catches all other exceptions.
+            print("Exception in MyRunnerBase: %s" % str(e), flush=True)
             if coord:
                 coord.request_stop(e)
             else:
@@ -470,7 +475,7 @@ from tensorflow.python.framework import tensor_util
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import array_ops
-def dropout_selu(x, rate, alpha=-1.7580993408473766, noise_shape=None, seed=None, name=None):
+def dropout_selu(x, rate, alpha=-1.7580993408473766, noise_shape=None, seed=None, name=None, training=False):
     """Dropout to a value with rescaling."""
     keep_prob = 1.0 - rate
     with ops.name_scope(name, "dropout", [x]) as name:
@@ -486,6 +491,8 @@ def dropout_selu(x, rate, alpha=-1.7580993408473766, noise_shape=None, seed=None
 
         # Do nothing if we know keep_prob == 1
         if tensor_util.constant_value(keep_prob) == 1:
+            return x
+        if not tensor_util.constant_value(training):
             return x
 
         noise_shape = noise_shape if noise_shape is not None else array_ops.shape(x)
