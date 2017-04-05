@@ -480,10 +480,12 @@ from tensorflow.python.framework import tensor_util
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import array_ops
+from tensorflow.python.layers import utils
 def dropout_selu(x, rate, alpha=-1.7580993408473766, noise_shape=None, seed=None, name=None, training=False):
     """Dropout to a value with rescaling."""
-    keep_prob = 1.0 - rate
-    with ops.name_scope(name, "dropout", [x]) as name:
+
+    def dropout_selu_impl(x, rate, alpha, noise_shape, seed, name):
+        keep_prob = 1.0 - rate
         x = ops.convert_to_tensor(x, name="x")
         if isinstance(keep_prob, numbers.Real) and not 0 < keep_prob <= 1:
             raise ValueError("keep_prob must be a scalar tensor or a float in the "
@@ -496,8 +498,6 @@ def dropout_selu(x, rate, alpha=-1.7580993408473766, noise_shape=None, seed=None
 
         # Do nothing if we know keep_prob == 1
         if tensor_util.constant_value(keep_prob) == 1:
-            return x
-        if not tensor_util.constant_value(training):
             return x
 
         noise_shape = noise_shape if noise_shape is not None else array_ops.shape(x)
@@ -519,3 +519,8 @@ def dropout_selu(x, rate, alpha=-1.7580993408473766, noise_shape=None, seed=None
         #ret = tf.add(tf.multiply(a , ret) , b)
         ret.set_shape(x.get_shape())
         return ret
+
+    with ops.name_scope(name, "dropout", [x]) as name:
+        return utils.smart_cond(training,
+            lambda: dropout_selu_impl(x, rate, alpha, noise_shape, seed, name),
+            lambda: array_ops.identity(x))
