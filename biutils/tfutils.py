@@ -163,11 +163,12 @@ from tensorflow.python.framework import errors
 import threading
 class MyRunnerBase(tf.train.QueueRunner):
     def __init__(self, outputs, batch_size, n_threads, shuffle=True, capacity=None, enqueue_many=False,
-                 shapes=None, dtypes=None):
+                 shapes=None, dtypes=None, name=None):
         self.n_threads = n_threads
         self.shuffle = shuffle
         self.batch_size = batch_size
         self.outputs = outputs
+        self._name = name
         if shapes is None:
             shapes = [o.get_shape().as_list() for o in self.outputs]
         if dtypes is None:
@@ -188,6 +189,9 @@ class MyRunnerBase(tf.train.QueueRunner):
             self.enqueue_op = self._queue.enqueue(self.outputs)
 
         super(MyRunnerBase, self).__init__(self._queue, [self.enqueue_op]*n_threads)
+        if name is not None:
+            c = tf.cast(self._queue.size(), tf.float32) * (1. / capacity)
+            self._capacity_summary = tf.summary.scalar("%s_fullness" % name, c)
 
 
     def get_data(self):
