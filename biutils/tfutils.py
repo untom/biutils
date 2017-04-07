@@ -524,3 +524,23 @@ def dropout_selu(x, rate, alpha=-1.7580993408473766, noise_shape=None, seed=None
         return utils.smart_cond(training,
             lambda: dropout_selu_impl(x, rate, alpha, noise_shape, seed, name),
             lambda: array_ops.identity(x))
+
+
+def saltpepper_noise(x, noise_rate, ones_rate=0.5, training=False, name=None):
+    ''' Adds saltpepper noise (sets some elements to either 0 or 1).
+        ones_rate controls the fraction of pepper (1s) vs salt (0s).
+        ones_rate == 0 =>  dropout (noise value is always 0)
+        ones_rate == 1 => dropin (noise value is always 1)
+    '''
+
+    def saltpepper_noise_impl(x, noise_rate, ones_rate):
+        assert 0 <= noise_rate <= 1
+        assert 0 <= ones_rate <= 1
+        b = tf.floor(tf.random_uniform(x.get_shape(), 0, 1)  + ones_rate)
+        c = tf.random_uniform(x.get_shape(), 0, 1) < noise_rate
+        return tf.where(c, b, x)
+
+    with ops.name_scope(name, "inputnoise", [x]) as name:
+        return utils.smart_cond(training,
+            lambda: saltpepper_noise_impl(x, noise_rate, ones_rate),
+            lambda: array_ops.identity(x))
