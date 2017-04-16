@@ -29,16 +29,17 @@ def generate_minibatches(batch_size, x_placeholder, y_placeholder,
             np.random.shuffle(idx)
             x_data, y_data = x_data[idx], y_data[idx]
 
+        if feed_dict is None:
+                feed_dict = {}
+
         for s in generate_slices(x_data.shape[0], batch_size,
                                  ignore_last_minibatch_if_smaller):
             xx, yy = x_data[s], y_data[s]
             if sparse.issparse(xx):
                 xx = xx.A
-            if feed_dict is None:
-                feed_dict = {x_placeholder: xx, y_placeholder: yy}
-            else:
-                feed_dict[x_placeholder] = xx
-                feed_dict[y_placeholder] = yy
+
+            feed_dict[x_placeholder] = xx
+            feed_dict[y_placeholder] = yy
             yield feed_dict
         cnt_epochs += 1
         if n_epochs is not None and cnt_epochs >= n_epochs:
