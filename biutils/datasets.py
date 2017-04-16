@@ -27,7 +27,11 @@ except ImportError:
 # some machine specific paths for bioinf@jku machines
 __datadir = {'tomlap': '/media/scratch/data',
              'blucomp': '/media/scratch/data'}
-_DATA_DIRECTORY = __datadir.get(platform.node(), os.path.expanduser("~/data"))
+
+if os.path.exists('/publicdata/biutils'):  # hack for the Bioinf Servers
+    _DATA_DIRECTORY = '/publicdata/biutils'
+else:
+    _DATA_DIRECTORY = __datadir.get(platform.node(), os.path.expanduser("~/data"))
 
 
 def load_dataset(dataset_name, return_testset=False,
