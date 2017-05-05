@@ -144,3 +144,8 @@ def random_seed():
     '''
     import time
     return np.uint32(hash(os.getpid() + time.time()) % 4294967295)
+
+
+def linear_decay(t, lr_start, lr_end, n_steps):
+    ''' Linearly decays learning rate from lr_start to lr_end in t_end timesteps '''
+    return lr_start + t*(lr_end - lr_start) / n_steps
