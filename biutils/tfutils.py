@@ -18,28 +18,35 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.util import nest
 from tensorflow.contrib import slim
 
-def generate_minibatches(batch_size, x_placeholder, y_placeholder,
-                         x_data, y_data, n_epochs=1,
+def generate_minibatches(batch_size, ph_list, data_list, n_epochs=1,
                          ignore_last_minibatch_if_smaller=True, shuffle=True,
                          feed_dict=None):
     cnt_epochs = 0
+    assert len(ph_list) == len(data_list), "Passed different number of data and placeholders"
+    assert len(data_list) >= 0, "Passed empty lists"
+
+    n_samples = data_list[0].shape[0]
+    n_items = len(data_list)
+
     while True:
         if shuffle:
-            idx = np.arange(x_data.shape[0])
+            idx = np.arange(n_samples)
             np.random.shuffle(idx)
-            x_data, y_data = x_data[idx], y_data[idx]
+            for i in range(n_items):
+                data_list[i] = data_list[i][idx]
 
         if feed_dict is None:
                 feed_dict = {}
 
-        for s in generate_slices(x_data.shape[0], batch_size,
-                                 ignore_last_minibatch_if_smaller):
-            xx, yy = x_data[s], y_data[s]
-            if sparse.issparse(xx):
-                xx = xx.A
-
-            feed_dict[x_placeholder] = xx
-            feed_dict[y_placeholder] = yy
+        for s in generate_slices(n_samples, batch_size, ignore_last_minibatch_if_smaller):
+            for i in range(n_items):
+                ph = ph_list[i]
+                d = data_list[i]
+                if sparse.issparse(d):
+                    d = d[s].A
+                else:
+                    d = d[s]
+                feed_dict[ph] = d
             yield feed_dict
         cnt_epochs += 1
         if n_epochs is not None and cnt_epochs >= n_epochs:
