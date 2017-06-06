@@ -8,6 +8,7 @@ Licensed under GPL, version 2 or a later (see LICENSE.rst)
 
 from __future__ import absolute_import, division, print_function
 import os
+import sys
 import numpy as np
 
 
@@ -146,6 +147,49 @@ def random_seed():
     return np.uint32(hash(os.getpid() + time.time()) % 4294967295)
 
 
-def linear_decay(t, lr_start, lr_end, n_steps):
-    ''' Linearly decays learning rate from lr_start to lr_end in t_end timesteps '''
-    return lr_start + t*(lr_end - lr_start) / n_steps
+def linear_decay(t, v_start, v_end, n_steps):
+    ''' Linearly decays learning rate from v_start to v_end in t_end timesteps '''
+    if t >= n_steps:
+        return v_end
+    return v_start + t*(v_end - v_start) / n_steps
+
+
+def exponential_decay(t, v_start, v_end, n_steps):
+    ''' Exponentially decays a value (e.g. learning rate) from v_start to v_end in t_end timesteps '''
+    if t >= n_steps:
+        return v_end
+    f = np.power(v_end / v_start, 1/(n_steps-1))
+    return v_start * (f**t)
+
+
+def startup_bookkeeping(logdir, curent_file):
+    '''
+    Performs common operations at start of each run.
+
+    Writes PID and argv into files in the logdir and copies all the source
+    files in the from current directory there as well.
+
+    logdir is expected to be a pathlib.Path
+    '''
+
+    import shutil
+    from pathlib import Path
+
+    if not logdir.exists():
+        logdir.mkdir(parents=True, exist_ok=True)
+
+    with open(logdir / "pid", 'w') as f:  # write PID so we can abort from outside
+        f.write(str(os.getpid()))
+        f.write("\n")
+
+    # make copy of current source files
+    dest = logdir / 'sources'
+    dest.mkdir(exist_ok=True)
+    localdir = Path(curent_file).parent
+    pyfiles = localdir.glob("*.py")
+    for fn in localdir.glob("*.py"):
+        shutil.copy(fn, dest / fn)
+
+    with open(logdir / "argv", 'w') as f:
+        f.write(' '.join(sys.argv))
+        f.write("\n")
