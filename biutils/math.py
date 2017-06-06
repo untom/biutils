@@ -17,3 +17,12 @@ def softmax(x, axis=1, out=None):
     e = np.exp(out, out=out)
     e /= e.sum(axis=axis).reshape(shape)
     return e
+
+
+def to_onehot(x, max_classes):
+    n_samples = x.shape[0]
+    out = np.zeros((n_samples, max_classes), dtype=x.dtype)
+    out.fill(0.0)
+    for i in range(n_samples):
+        out[i, x[i]] = 1
+    return out
