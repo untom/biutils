@@ -552,3 +552,8 @@ def saltpepper_noise(x, noise_rate, ones_rate=0.5, training=False, name=None):
         return utils.smart_cond(training,
             lambda: saltpepper_noise_impl(x, noise_rate, ones_rate),
             lambda: array_ops.identity(x))
+
+
+def lecun_tanh(x):
+    ''' logistic function suggested in LeCun's "Efficient Backprop". '''
+    return 1.7159 * tf.nn.tanh(x * 2.0 / 3.0)
