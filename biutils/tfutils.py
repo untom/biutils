@@ -517,12 +517,8 @@ def dropout_selu(x, rate, alpha=-1.7580993408473766, noise_shape=None, seed=None
         #binary_tensor2 = math_ops.ceil(random_tensor)
         ret = x * binary_tensor + alpha * (1-binary_tensor)
 
-        #a = tf.sqrt(1.0/(keep_prob+alpha^2*keep_prob*(1.0-keep_prob)))
-        a = tf.sqrt(1.0 / keep_prob + tf.pow(alpha,2) * keep_prob * 1.0 - keep_prob)
-        #a = tf.sqrt(tf.div(1.0, tf.add(keep_prob ,tf.multiply(tf.pow(alpha,2) , tf.multiply(keep_prob,    tf.subtract(1.0,keep_prob)))) ))
-
-        b = -a * (1 - keep_prob) * alpha
-        #b = tf.neg( tf.mul(a , (tf.multiply(tf.subtract(1.0,keep_prob),alpha))))
+        a = tf.sqrt(1.0 / (keep_prob + alpha*alpha * keep_prob * (1.0 - keep_prob)))
+        b = -a * (1.0 - keep_prob) * alpha
         ret = a * ret + b
         #ret = tf.add(tf.multiply(a , ret) , b)
         ret.set_shape(x.get_shape())
