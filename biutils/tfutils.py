@@ -12,7 +12,6 @@ from scipy import sparse
 import collections
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib import layers
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.util import nest
@@ -106,38 +105,6 @@ def get_multitask_ce_loss(logits, y, summary_prefix='', add_summaries=True):
     else:
         loss = ce_mean
     return loss
-
-
-def add_linear_layer(x, n_outputs, keep_prob=None, activation_fn=tf.identity,
-                     w_initializer=None, regularizer=None, b_initializer=None,
-                     add_summaries=True):
-    if w_initializer is None:
-        w_initializer = layers.initializers.variance_scaling_initializer()
-    n_hiddens = x.get_shape()[-1]
-    w = tf.get_variable("weights", [n_hiddens, n_outputs],
-                        initializer=w_initializer)
-    b = tf.get_variable('bias', [n_outputs], initializer=b_initializer)
-    x = tf.matmul(x, w) + b
-    x = activation_fn(x)
-    if keep_prob is not None:
-        x = tf.nn.dropout(x, keep_prob)
-    if add_summaries:
-        track_activation_summary(x, w, b)
-    return x
-
-
-def add_conv_layer(x, kernel_shape, n_filters, strides=[1, 1],
-                   activation_fn=tf.nn.relu, initializer=None, regularizer=None, add_summaries=True):
-    k = [kernel_shape[0], kernel_shape[1], x.get_shape()[-1], n_filters]
-    if initializer is None:
-        initializer = layers.initializers.variance_scaling_initializer()
-    w = tf.get_variable('weights', k, initializer=initializer, regularizer=regularizer)
-    b = tf.get_variable('bias', [n_filters], initializer=tf.constant_initializer(0.0))
-    conv = tf.nn.conv2d(x, w, [1, strides[0], strides[1], 1], padding='SAME')
-    conv = activation_fn(conv)
-    if add_summaries:
-        track_activation_summary(conv, w, b)
-    return conv
 
 
 def resize_and_crop(image, smaller_size, cropped_size):
